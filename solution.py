@@ -1,10 +1,10 @@
+
 #%%
 #importing some useful packages
 import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 import numpy as np
 import cv2
-%matplotlib inline
 
 #%%
 #reading in an image
@@ -113,14 +113,34 @@ def weighted_img(img, initial_img, α=0.8, β=1., λ=0.):
 def process_image(img):
     w = img.shape[1]
     h = img.shape[0]
-    result = grayscale(img)
-    result = gaussian_blur(img, 5)
-    result = canny(result, 120, 240)
-    lower_trapezoid = np.array([[0, h],[w, h], [0.6*w,0.5*h], [0.4*w, 0.5*h]], np.int)
-    result = region_of_interest(result, [lower_trapezoid])
-    return result
+    gray = grayscale(img)
+    blur = gaussian_blur(gray, 9)
+    cannyEdges = canny(blur, 50, 150)
+    lower_trapezoid = np.array([[0, h],[w, h], [0.6*w,0.6*h], [0.4*w, 0.6*h]], np.int)
+    roi = region_of_interest(cannyEdges, [lower_trapezoid])
+    hough_img = hough_lines(roi, 1, np.pi / 180, 15, 5, 5)
+    result = weighted_img(hough_img, img, 1, 1)
+    return hough_img
 
-image = mpimg.imread('test_images/solidWhiteCurve.jpg')
-processed = process_image(image)
-#plt.imshow(image)
-plt.imshow(processed, cmap='gray')
+import os
+inDir = 'test_images'
+outDir = 'test_images/out'
+testFiles = os.listdir(inDir, )
+
+for testFile in testFiles:
+    if os.path.isdir(inDir + '/' + testFile):
+        continue
+    testImage = mpimg.imread(inDir + '/' + testFile)
+    out = process_image(testImage)
+    mpimg.imsave(outDir + '/' + testFile, out, cmap='gray')
+
+print('completed')
+#%%
+# Import everything needed to edit/save/watch video clips
+from moviepy.editor import VideoFileClip
+from IPython.display import HTML
+
+white_output = 'white.mp4'
+clip1 = VideoFileClip("challenge.mp4")
+white_clip = clip1.fl_image(process_image) #NOTE: this function expects color images!!
+%time white_clip.write_videofile(white_output, audio=False)
