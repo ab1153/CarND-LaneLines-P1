@@ -58,7 +58,7 @@ def region_of_interest(img, vertices):
     masked_image = cv2.bitwise_and(img, mask)
     return masked_image
 
-
+    
 def draw_lines(img, lines, color=[255, 0, 0], thickness=2):
     """
     NOTE: this is the function you might want to use as a starting point once you want to 
@@ -76,9 +76,92 @@ def draw_lines(img, lines, color=[255, 0, 0], thickness=2):
     If you want to make the lines semi-transparent, think about combining
     this function with the weighted_img() function below
     """
+    result = []
+    left = []
+    right = []
+
+    # can be prove, the angel is only dependent on the height of camera mounted
+    slopeThreshold = 0.5
+
     for line in lines:
         for x1,y1,x2,y2 in line:
-            cv2.line(img, (x1, y1), (x2, y2), color, thickness)
+            slope = (y2-y1) / (x2-x1)
+            if slope > slopeThreshold:
+                right.append((x1,y1))
+                right.append((x2,y2))
+            elif slope < -slopeThreshold:
+                left.append((x1,y1))
+                left.append((x2,y2))
+    
+    left_xs = np.array([x for (x,y) in left])
+    left_ys = np.array([y for (x,y) in left])
+    m, b = np.polyfit(left_xs, left_ys, 1)
+    # determine the lower left
+    x_candidate1 = np.amin(left_xs)
+    y_candidate1 = x_candidate1 * m + b
+    y_candidate2 = np.amax(left_ys)
+    x_candidate2 = (y_candidate2 - b) / m
+    if x_candidate1 < x_candidate2:
+        x1 = x_candidate2
+        y1 = y_candidate2
+    else:
+        x1 = x_candidate1
+        y1 = y_candidate1
+    # the upper right
+    x_candidate1 = np.amax(left_xs)
+    y_candidate1 = x_candidate1 * m + b
+    y_candidate2 = np.amin(left_ys)
+    x_candidate2 = (y_candidate2 - b) / m
+    if x_candidate1 < x_candidate2:
+        x2 = x_candidate2
+        y2 = y_candidate2
+    else:
+        x2 = x_candidate1
+        y2 = y_candidate1
+    
+    result.append((x1,y1,x2,y2))
+
+
+    right_xs = np.array([x for (x,y) in right])
+    right_ys = np.array([y for (x,y) in right])
+    
+    m, b = np.polyfit(right_xs, right_ys, 1)
+    # determin the lower right
+    x_candidate1 = np.amax(right_xs)
+    y_candidate1 = x_candidate1 * m + b
+    y_candidate2 = np.amax(right_ys)
+    x_candidate2 = (y_candidate2 - b) / m
+    if x_candidate1 < x_candidate2:
+        x1 = x_candidate1
+        y1 = y_candidate1
+    else:
+        x1 = x_candidate2
+        y1 = y_candidate2
+    
+    # the upper left
+    x_candidate1 = np.amin(right_xs)
+    y_candidate1 = x_candidate1 * m + b
+    y_candidate2 = np.amin(right_xs)
+    x_candidate2 = (y_candidate2 - b) / m
+    if x_candidate1 < x_candidate2:
+        x2 = x_candidate1
+        y2 = y_candidate1
+    else:
+        x2 = x_candidate2
+        y2 = y_candidate2
+    
+    result.append((x1,y1,x2,y2))
+
+
+    for line in result:
+        x1,y1,x2,y2 = line
+        x1 = int(round(x1))
+        y1 = int(round(y1))
+        x2 = int(round(x2))
+        y2 = int(round(y2))
+
+        cv2.line(img, (x1, y1), (x2, y2), color, thickness)
+
 
 def hough_lines(img, rho, theta, threshold, min_line_len, max_line_gap):
     """
@@ -88,7 +171,8 @@ def hough_lines(img, rho, theta, threshold, min_line_len, max_line_gap):
     """
     lines = cv2.HoughLinesP(img, rho, theta, threshold, np.array([]), minLineLength=min_line_len, maxLineGap=max_line_gap)
     line_img = np.zeros((img.shape[0], img.shape[1], 3), dtype=np.uint8)
-    draw_lines(line_img, lines)
+
+    draw_lines(line_img, lines, color=[255, 0, 0], thickness=7)
     return line_img
 
 # Python 3 has support for cool math symbols.
@@ -119,8 +203,8 @@ def process_image(img):
     lower_trapezoid = np.array([[0, h],[w, h], [0.6*w,0.6*h], [0.4*w, 0.6*h]], np.int)
     roi = region_of_interest(cannyEdges, [lower_trapezoid])
     hough_img = hough_lines(roi, 1, np.pi / 180, 15, 5, 5)
-    result = weighted_img(hough_img, img, 1, 1)
-    return hough_img
+    result = weighted_img(hough_img, img, 1, 0.6)
+    return result
 
 import os
 inDir = 'test_images'
@@ -141,6 +225,6 @@ from moviepy.editor import VideoFileClip
 from IPython.display import HTML
 
 white_output = 'white.mp4'
-clip1 = VideoFileClip("challenge.mp4")
+clip1 = VideoFileClip("solidYellowLeft.mp4")
 white_clip = clip1.fl_image(process_image) #NOTE: this function expects color images!!
 %time white_clip.write_videofile(white_output, audio=False)
